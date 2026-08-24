@@ -204,13 +204,15 @@ def run_ragas_eval(rag_results: list, version: str) -> dict:
     scores = {}
     for key in ["faithfulness", "answer_relevancy", "context_recall", "context_precision"]:
         raw = result[key]
-        scores[key] = float(np.mean([v for v in raw if v is not None]))
+        valid_scores = [float(v) for v in raw if v is not None and np.isfinite(v)]
+        scores[key] = float(np.mean(valid_scores)) if valid_scores else None
 
     # In kết quả
     print(f"\n📊 Kết quả RAGAS — Prompt {version.upper()}:")
     for k, v in scores.items():
         star = " ⭐" if k == "faithfulness" and v >= 0.8 else ""
-        print(f"  {k:30s}: {v:.4f}{star}")
+        display_score = f"{v:.4f}" if v is not None else "N/A"
+        print(f"  {k:30s}: {display_score}{star}")
 
     return scores
 
@@ -240,11 +242,17 @@ def main():
     print("=" * 65)
     for metric in ["faithfulness", "answer_relevancy", "context_recall", "context_precision"]:
         s1, s2  = v1_scores[metric], v2_scores[metric]
-        winner  = "← V1" if s1 > s2 else "← V2"
-        print(f"  {metric:30s}  {s1:>8.4f}  {s2:>8.4f}  {winner}")
+        winner  = "← V1" if s1 is not None and (s2 is None or s1 > s2) else "← V2"
+        s1_text = f"{s1:>8.4f}" if s1 is not None else f"{'N/A':>8}"
+        s2_text = f"{s2:>8.4f}" if s2 is not None else f"{'N/A':>8}"
+        print(f"  {metric:30s}  {s1_text}  {s2_text}  {winner}")
 
     # Kiểm tra mục tiêu
-    best_faith = max(v1_scores["faithfulness"], v2_scores["faithfulness"])
+    faithfulness_scores = [
+        score for score in (v1_scores["faithfulness"], v2_scores["faithfulness"])
+        if score is not None
+    ]
+    best_faith = max(faithfulness_scores, default=0.0)
     if best_faith >= 0.8:
         print(f"\n✅ Đạt mục tiêu: faithfulness = {best_faith:.4f} ≥ 0.8")
     else:
