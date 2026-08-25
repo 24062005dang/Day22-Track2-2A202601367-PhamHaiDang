@@ -16,6 +16,7 @@ DELIVERABLE: faithfulness ≥ 0.8 cho ít nhất 1 prompt version
 """
 import sys
 import json
+import os
 import types
 import warnings
 warnings.filterwarnings("ignore")
@@ -226,15 +227,21 @@ def main():
     if not config.validate():
         sys.exit(1)
 
+    only_version = os.getenv("RAGAS_ONLY_VERSION", "").lower()
+    if only_version not in ("", "v1", "v2"):
+        raise ValueError("RAGAS_ONLY_VERSION must be empty, v1, or v2")
+
     vectorstore = setup_vectorstore()
 
     # Thu thập kết quả RAG cho cả V1 và V2
-    v1_results = collect_rag_outputs(vectorstore, "v1")
-    v2_results = collect_rag_outputs(vectorstore, "v2")
+    v1_results = collect_rag_outputs(vectorstore, "v1") if only_version in ("", "v1") else None
+    v2_results = collect_rag_outputs(vectorstore, "v2") if only_version in ("", "v2") else None
 
     # Chạy RAGAS evaluation
-    v1_scores = run_ragas_eval(v1_results, "v1")
-    v2_scores = run_ragas_eval(v2_results, "v2")
+    report_path = Path(__file__).parent.parent / "data" / "ragas_report.json"
+    existing_report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    v1_scores = run_ragas_eval(v1_results, "v1") if v1_results is not None else existing_report.get("prompt_v1_scores", {})
+    v2_scores = run_ragas_eval(v2_results, "v2") if v2_results is not None else existing_report.get("prompt_v2_scores", {})
 
     # In bảng so sánh
     print("\n" + "=" * 65)
@@ -265,7 +272,6 @@ def main():
         "prompt_v2_scores": v2_scores,
         "target_met": best_faith >= 0.8,
     }
-    report_path = Path(__file__).parent.parent / "data" / "ragas_report.json"
     # TODO: Ghi report vào file bằng json.dumps hoặc json.dump
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"💾 Đã lưu báo cáo vào {report_path}")
